@@ -1,0 +1,10 @@
+{
+    "sid": null,
+    "url": "http://localhost/tt-rss/api/",
+    "passive_time": "15m",
+    "active_time": "5s",
+    "active_time_timeout": "5m",
+    "font_size": 80,
+    "notification_size": 60,
+    "position": "bottom-right"
+}
