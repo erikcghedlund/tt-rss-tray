@@ -1,7 +1,6 @@
 #!/bin/python
 
 from os import path, getcwd
-from sys import exit as sexit
 from time import sleep
 from json import load, loads, dump
 from threading import Thread
