@@ -1,28 +1,31 @@
 #!/bin/python
 
 from os import path, getcwd
+from sys import exit as sexit
 from time import sleep
 from json import load, loads, dump
 from threading import Thread
+from subprocess import run
+from webbrowser import open_new_tab
 
 import requests
-from pystray import Icon, Menu
+from pystray import Icon, Menu, MenuItem
 from PIL import Image, ImageDraw, ImageFont
 from pytimeparse import parse as time_parse
 
 __location__ = path.realpath(path.join(getcwd(), path.dirname(__file__)))
-sid = None
 icon_path = path.join(__location__, "./icon_classic_128.png")
 setting_path = path.join(__location__, "./settings.json")
+alive=True
 
 setting = {
     "sid": None,
-    "url": "http://localhost/tt-rss/api/",
-    "passive_time": "15m",
-    "active_time": "5s",
+    "url": "http://localhost/tt-rss/",
+    "sleep_time": "5m",
     "font_size": 80,
     "notification_size": 60,
     "position": "bottom-right",
+    "client": None,
 }
 
 positions = dict()
@@ -46,18 +49,35 @@ def login(username=None, password=None):
     if password is None:
         password = input("password: ")
     payload = {"op": "login", "user": username, "password": password}
-    res = requests.post(setting["url"], json=payload)
+    url = setting["url"] + "api/"
+    res = requests.post(url, json=payload)
     return loads(res.text)["content"]["session_id"]
 
 
 def get_unreads():
     payload = {"sid": setting["sid"], "op": "getUnread"}
-    res = requests.post(setting["url"], json=payload)
+    url = setting["url"] + "api/"
+    res = requests.post(url, json=payload)
     return loads(res.text)["content"]["unread"]
 
 
+def open_client(self):
+    if setting["client"] is None:
+        open_new_tab(setting["url"])
+    else:
+        run(setting["client"], shell=True, check=True)
+
+
+def exit_app(self):
+    global alive
+    alive = False
+
+
 def setup_icon():
-    icon = Icon("tt-rss-tray", Image.open(icon_path))
+    icon = Icon("tt-rss-tray", Image.open(icon_path), menu=Menu(
+        MenuItem("Open client", open_client, default=True),
+        MenuItem("Quit", exit_app)
+        ))
     return icon
 
 
@@ -90,7 +110,9 @@ def draw_unreads(n):
 
 def main_loop(icon):
     last_unreads = -1
-    while True:
+    actual_sleep = time_parse("5s")
+    wait_iterations = int(time_parse(setting["sleep_time"]) / actual_sleep)
+    while alive:
         unreads = get_unreads()
         if unreads == last_unreads:
             continue
@@ -102,22 +124,24 @@ def main_loop(icon):
         # This is hacky but I could not get it to work the proper way...
         icon.icon = image
         icon._update_icon()
-        sleep(time_parse(setting["passive_time"]))
+        for _ in range(wait_iterations):
+            if not alive:
+                break
+            sleep(actual_sleep)
+    icon.stop()
 
 
 def setup():
     global setting
     _setup_positions()
     with open(setting_path, "r") as f:
-        setting = load(f)
+        setting = dict(setting, **load(f))
 
 
 def main():
-    global sid
     setup()
-    if setting["sid"] == None:
-        sid = login()
-        setting["sid"] = sid
+    if setting["sid"] is None:
+        setting["sid"] = login()
     with open(setting_path, "w") as f:
         dump(setting, f, indent=4)
     icon = setup_icon()
