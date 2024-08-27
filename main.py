@@ -3,6 +3,7 @@
 from os import path, getcwd
 from time import sleep
 from json import load, loads, dump
+import logging
 from threading import Thread
 from subprocess import run
 from webbrowser import open_new_tab
@@ -15,7 +16,8 @@ from pytimeparse import parse as time_parse
 __location__ = path.realpath(path.join(getcwd(), path.dirname(__file__)))
 icon_path = path.join(__location__, "./icon_classic_128.png")
 setting_path = path.join(__location__, "./settings.json")
-alive=True
+alive = True
+logger = logging.getLogger(__name__)
 
 setting = {
     "sid": None,
@@ -42,6 +44,17 @@ def _setup_positions():
         )
 
 
+def _maybe_post(url, payload, level):
+    try:
+        return requests.post(url, json=payload, timeout=30)
+    except requests.exceptions.ConnectionError as e:
+        level('Failed to establish connection with server: "{}"'.format(e))
+        return None
+    except requests.exceptions.Timeout:
+        level("Connection to server timed out")
+        return None
+
+
 def login(username=None, password=None):
     if username is None:
         username = input("username: ")
@@ -49,15 +62,42 @@ def login(username=None, password=None):
         password = input("password: ")
     payload = {"op": "login", "user": username, "password": password}
     url = setting["url"] + "api/"
-    res = requests.post(url, json=payload)
-    return loads(res.text)["content"]["session_id"]
+    res = _maybe_post(url, payload, logger.fatal)
+    if res is None:
+        return None
+    json_obj = loads(res.text)
+    if json_obj["status"] == 1:
+        logger.fatal('Failed to log in user "{}"'.format(username))
+        return None
+    return json_obj["content"]["session_id"]
 
 
 def get_unreads():
     payload = {"sid": setting["sid"], "op": "getUnread"}
     url = setting["url"] + "api/"
-    res = requests.post(url, json=payload)
-    return loads(res.text)["content"]["unread"]
+    res = _maybe_post(url, payload, logger.warning)
+    if res is None:
+        return 0
+    json_obj = loads(res.text)
+    if json_obj["status"] == 1:
+        logger.warning("API error: {}".format(json_obj["content"]["error"]))
+        return None
+    return json_obj["content"]["unread"]
+
+
+def check_login():
+    if setting["sid"] is None:
+        return False
+    payload = {"sid": setting["sid"], "op": "isLoggedIn"}
+    url = setting["url"] + "api/"
+    res = _maybe_post(url, payload, logger.fatal)
+    if res is None:
+        return None
+    json_obj = loads(res.text)
+    if json_obj["status"] == 1:
+        logger.warning("API error: {}".format(json_obj["content"]["error"]))
+        return None
+    return json_obj["content"]["status"]
 
 
 def open_client(self):
@@ -73,10 +113,14 @@ def exit_app(self):
 
 
 def setup_icon():
-    icon = Icon("tt-rss-tray", Image.open(icon_path), menu=Menu(
-        MenuItem("Open client", open_client, default=True),
-        MenuItem("Quit", exit_app)
-        ))
+    icon = Icon(
+        "tt-rss-tray",
+        Image.open(icon_path),
+        menu=Menu(
+            MenuItem("Open client", open_client, default=True),
+            MenuItem("Quit", exit_app),
+        ),
+    )
     return icon
 
 
@@ -133,14 +177,23 @@ def main_loop(icon):
 def setup():
     global setting
     _setup_positions()
+    logging.basicConfig(level=logging.INFO)
     with open(setting_path, "r") as f:
         setting = dict(setting, **load(f))
 
 
 def main():
     setup()
-    if setting["sid"] is None:
-        setting["sid"] = login()
+    sid_is_valid = check_login()
+    if sid_is_valid is None:
+        return  # If true, we failed to establish a connection to the server
+    if sid_is_valid is False:
+        logger.info("session id is expired, invalid or absent, requesting new login")
+        maybe_sid = login()
+        if maybe_sid is None:
+            return
+        logger.info('setting session id to "{}"'.format(maybe_sid))
+        setting["sid"] = maybe_sid
     with open(setting_path, "w") as f:
         dump(setting, f, indent=4)
     icon = setup_icon()
