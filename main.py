@@ -206,7 +206,9 @@ def setup():
 
 def close():
     if not path.exists(setting_path):
-        setting["user"] = None # We should probably not store the password in plain text...
+        setting["user"] = (
+            None  # We should probably not store the password in plain text...
+        )
         setting["pass"] = None
         with open(setting_path, "w") as f:
             dump(setting, f, indent=4)
