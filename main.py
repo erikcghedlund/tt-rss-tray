@@ -1,12 +1,14 @@
 #!/bin/python
 
 from os import path, getcwd
+from sys import argv
 from time import sleep
 from json import load, loads, dump
 import logging
 from threading import Thread
 from subprocess import run
 from webbrowser import open_new_tab
+from argparse import ArgumentParser
 
 import requests
 from pystray import Icon, Menu, MenuItem
@@ -16,19 +18,11 @@ from pytimeparse import parse as time_parse
 __location__ = path.realpath(path.join(getcwd(), path.dirname(__file__)))
 icon_path = path.join(__location__, "./icon_classic_128.png")
 setting_path = path.join(__location__, "./settings.json")
-alive = True
 logger = logging.getLogger(__name__)
+FONT_SIZE = 80
+NOTIFICATION_SIZE = 60
 
-setting = {
-    "sid": None,
-    "url": "http://localhost/tt-rss/",
-    "sleep_time": "5m",
-    "font_size": 80,
-    "notification_size": 60,
-    "position": "bottom-right",
-    "client": None,
-}
-
+setting = dict()
 positions = dict()
 
 
@@ -36,12 +30,29 @@ def _setup_positions():
     global positions
     with Image.open(icon_path) as image:
         positions["top-left"] = (0, 0)
-        positions["bottom-left"] = (0, image.width - setting["notification_size"])
-        positions["top-right"] = (image.height - setting["notification_size"], 0)
+        positions["bottom-left"] = (0, image.width - NOTIFICATION_SIZE)
+        positions["top-right"] = (image.height - NOTIFICATION_SIZE, 0)
         positions["bottom-right"] = (
-            image.height - setting["notification_size"],
-            image.width - setting["notification_size"],
+            image.height - NOTIFICATION_SIZE,
+            image.width - NOTIFICATION_SIZE,
         )
+
+
+def _setup_parser():
+    parser = ArgumentParser(
+        "TT RSS Tray",
+        description="A tray application for seeing the number of unread articles in your Tiny Tiny RSS feed",
+    )
+    parser.add_argument("-i", "--sid")
+    parser.add_argument("-u", "--user")
+    parser.add_argument("-p", "--pass")
+    parser.add_argument("-l", "--url", default="http://localhost/tt-rss/")
+    parser.add_argument("-s", "--sleep", default="5m")
+    parser.add_argument("-k", "--client")
+    parser.add_argument(
+        "-n", "--position", default="bottom-right", choices=positions.keys()
+    )
+    return parser
 
 
 def _maybe_post(url, payload, level):
@@ -126,7 +137,7 @@ def setup_icon():
 
 def draw_unreads(n):
     # Create a new image with white background
-    size = setting["notification_size"]
+    size = setting[NOTIFICATION_SIZE]
     image = Image.new("RGBA", (size, size), (255, 255, 255, 0))
     draw = ImageDraw.Draw(image)
 
@@ -152,9 +163,11 @@ def draw_unreads(n):
 
 
 def main_loop(icon):
+    global alive
+    alive = True
     last_unreads = -1
     actual_sleep = time_parse("5s")
-    wait_iterations = int(time_parse(setting["sleep_time"]) / actual_sleep)
+    wait_iterations = int(time_parse(setting["sleep"]) / actual_sleep)
     while alive:
         unreads = get_unreads()
         if unreads == last_unreads:
@@ -177,9 +190,28 @@ def main_loop(icon):
 def setup():
     global setting
     _setup_positions()
-    logging.basicConfig(level=logging.INFO)
-    with open(setting_path, "r") as f:
-        setting = dict(setting, **load(f))
+    parser = _setup_parser()
+    logging.basicConfig(level=logging.DEBUG)
+    if path.exists(setting_path):
+        with open(setting_path, "r") as f:
+            setting = dict(setting, **load(f))
+            logger.debug("loaded settings {}".format(setting))
+    known = parser.parse_args(argv[1:])
+    for key, value in vars(known).items():
+        if key in setting.keys() and parser.get_default(key) == value:
+            continue
+        logger.debug("Overwriting setting {} with {}".format(key, value))
+        setting[key] = value
+
+
+def close():
+    if not path.exists(setting_path):
+        setting["user"] = (
+            None  # We should probably not store the password in plain text...
+        )
+        setting["pass"] = None
+        with open(setting_path, "w") as f:
+            dump(setting, f, indent=4)
 
 
 def main():
@@ -189,16 +221,15 @@ def main():
         return  # If true, we failed to establish a connection to the server
     if sid_is_valid is False:
         logger.info("session id is expired, invalid or absent, requesting new login")
-        maybe_sid = login()
+        maybe_sid = login(setting["user"], setting["pass"])
         if maybe_sid is None:
             return
         logger.info('setting session id to "{}"'.format(maybe_sid))
         setting["sid"] = maybe_sid
-    with open(setting_path, "w") as f:
-        dump(setting, f, indent=4)
     icon = setup_icon()
     Thread(target=icon.run).start()
     main_loop(icon)
+    close()
 
 
 if __name__ == "__main__":
