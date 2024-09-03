@@ -18,8 +18,6 @@ from pytimeparse import parse as time_parse
 __location__ = path.realpath(path.join(getcwd(), path.dirname(__file__)))
 icon_path = path.join(__location__, "./icon_classic_128.png")
 setting_path = path.join(__location__, "./settings.json")
-sid_path = path.join(__location__, "./.sid")
-alive = True
 logger = logging.getLogger(__name__)
 FONT_SIZE = 80
 NOTIFICATION_SIZE = 60
@@ -165,6 +163,8 @@ def draw_unreads(n):
 
 
 def main_loop(icon):
+    global alive
+    alive = True
     last_unreads = -1
     actual_sleep = time_parse("5s")
     wait_iterations = int(time_parse(setting["sleep"]) / actual_sleep)
