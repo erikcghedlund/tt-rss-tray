@@ -137,7 +137,7 @@ def setup_icon():
 
 def draw_unreads(n):
     # Create a new image with white background
-    size = setting[NOTIFICATION_SIZE]
+    size = NOTIFICATION_SIZE
     image = Image.new("RGBA", (size, size), (255, 255, 255, 0))
     draw = ImageDraw.Draw(image)
 
@@ -173,7 +173,7 @@ def main_loop(icon):
         if unreads == last_unreads:
             continue
         last_unreads = unreads
-        image = Image.open("/tmp/icon_tt_rss.png")
+        image = Image.open(icon_path)
         if unreads != 0:
             image.paste(draw_unreads(unreads), positions[setting["position"]])
 
