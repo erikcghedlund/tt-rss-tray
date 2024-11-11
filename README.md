@@ -44,13 +44,13 @@ the same folder as the program file.
 
 #### Example configuration
 
-```json
+```jsonc
 {
     "sid": null, # Session ID Given by the Tiny Tiny RSS-API. Update automatically
-    "url": "http://localhost/tt-rss/", # URL of you Tiny Tiny RSS-Server (Default: "http://localhost/tt-rss/")
-    "sleep_time": "5m", # The time inbetween checking for new posts (Default: "5m")
-    "position": "bottom-right", # Where the number of unread posts are drawn on the icon. Should be top-left, bottom-left, top-right or bottom-right (Default: "bottom-right")
-    "client": null # Custom command to open the client, if any. Will open in webbrowser if no null (Default: null)
+    "url": "http://localhost/tt-rss/", // URL of you Tiny Tiny RSS-Server (Default: "http://localhost/tt-rss/")
+    "sleep_time": "5m", // The time inbetween checking for new posts (Default: "5m")
+    "position": "bottom-right", // Where the number of unread posts are drawn on the icon. Should be top-left, bottom-left, top-right or bottom-right (Default: "bottom-right")
+    "client": null // Custom command to open the client, if any. Will open in webbrowser if null (Default: null)
 }
 ```
 
